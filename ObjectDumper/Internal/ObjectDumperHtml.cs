@@ -3,7 +3,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Net.Http;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace ObjectDumping.Internal
 {
@@ -16,7 +17,7 @@ namespace ObjectDumping.Internal
         {
         }
 
-        public static string Dump(object element, DumpOptions dumpOptions = null)
+        public static string Dump(object value, DumpOptions dumpOptions = null)
         {
             if (dumpOptions == null)
             {
@@ -24,272 +25,150 @@ namespace ObjectDumping.Internal
             }
 
             var instance = new ObjectDumperHtml(dumpOptions);
-            instance.Write($"var {GetVariableName(element)} = ");
-            instance.FormatValue(element);
-            instance.Write(";");
+            var type = GetTypeName(value);
+            instance.Write($"<div class={CssClass("dump", "type-" + type)}>");
 
+            instance.Write($"<div class={CssClass("type-info")}>");
+            instance.Write($"<span class={CssClass("label")}>Dumped Type:</span> ");
+            instance.Write($"<span class={CssClass("type")}>{System.Net.WebUtility.HtmlEncode(type)}</span>");
+            instance.Write("</div>");
+            instance.DumpData(value);
+            instance.Write("</div>");
             return instance.ToString();
         }
 
-        private void CreateObject(object o, int? intentLevel = null)
+        protected override void WriteObjectStart(object value)
         {
-            this.Write($"<div class='object'> {GetClassName(o)}", intentLevel);
-            this.LineBreak();
-            this.StartLine("{");
-            this.LineBreak();
-            this.Level++;
-
-            var properties = o.GetType().GetRuntimeProperties()
-                .Where(p => p.GetMethod != null && p.GetMethod.IsPublic && p.GetMethod.IsStatic == false)
-                .ToList();
-
-            if (this.DumpOptions.ExcludeProperties != null && this.DumpOptions.ExcludeProperties.Any())
-            {
-                properties = properties
-                    .Where(p => !this.DumpOptions.ExcludeProperties.Contains(p.Name))
-                    .ToList();
-            }
-
-            if (this.DumpOptions.SetPropertiesOnly)
-            {
-                properties = properties
-                    .Where(p => p.SetMethod != null && p.SetMethod.IsPublic && p.SetMethod.IsStatic == false)
-                    .ToList();
-            }
-
-            if (this.DumpOptions.IgnoreDefaultValues)
-            {
-                properties = properties
-                    .Where(p =>
-                    {
-                        var value = p.GetValue(o);
-                        var defaultValue = p.PropertyType.GetDefault();
-                        var isDefaultValue = Equals(value, defaultValue);
-                        return !isDefaultValue;
-                    })
-                    .ToList();
-            }
-
-            if (this.DumpOptions.PropertyOrderBy != null)
-            {
-                properties = properties.OrderBy(this.DumpOptions.PropertyOrderBy.Compile())
-                    .ToList();
-            }
-
-            var last = properties.LastOrDefault();
-
-            foreach (var property in properties)
-            {
-                var value = property.TryGetValue(o);
-                this.StartLine($"{property.Name} = ");
-                this.FormatValue(value);
-                if (!Equals(property, last))
-                {
-                    this.Write(",");
-                }
-
-                this.LineBreak();
-            }
-
-            this.Level--;
-            this.StartLine("}");
+            Write($"<div class={"type-" + GetTypeName(value)}>");
         }
 
-        private void FormatValue(object o, int? intentLevel = null)
+        protected override void WriteObjectEnd(object value)
         {
-            if (this.IsMaxLevel())
-            {
-                return;
-            }
-
-            if (o == null)
-            {
-                this.Write("null", intentLevel);
-                return;
-            }
-
-            if (o is bool)
-            {
-                this.Write($"{o.ToString().ToLower()}", intentLevel);
-                return;
-            }
-
-            if (o is string)
-            {
-                var str = $@"{o}".Escape();
-                this.Write($"\"{str}\"", intentLevel);
-                return;
-            }
-
-            if (o is char)
-            {
-                var c = o.ToString().Replace("\0", "").Trim();
-                this.Write($"\'{c}\'", intentLevel);
-                return;
-            }
-
-            if (o is double)
-            {
-                this.Write($"{o}d", intentLevel);
-                return;
-            }
-
-            if (o is decimal)
-            {
-                this.Write($"{o}m", intentLevel);
-                return;
-            }
-
-            if (o is byte || o is sbyte)
-            {
-                this.Write($"{o}", intentLevel);
-                return;
-            }
-
-            if (o is float)
-            {
-                this.Write($"{o}f", intentLevel);
-                return;
-            }
-
-            if (o is int || o is uint)
-            {
-                this.Write($"{o}", intentLevel);
-                return;
-            }
-
-            if (o is long || o is ulong)
-            {
-                this.Write($"{o}L", intentLevel);
-                return;
-            }
-
-            if (o is short || o is ushort)
-            {
-                this.Write($"{o}", intentLevel);
-                return;
-            }
-
-            if (o is DateTime dateTime)
-            {
-                if (dateTime == DateTime.MinValue)
-                {
-                    this.Write($"DateTime.MinValue", intentLevel);
-                }
-                else if (dateTime == DateTime.MaxValue)
-                {
-                    this.Write($"DateTime.MaxValue", intentLevel);
-                }
-                else
-                {
-                    this.Write($"DateTime.ParseExact(\"{dateTime:O}\", \"O\", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)", intentLevel);
-                }
-
-                return;
-            }
-
-            if (o is Enum)
-            {
-                this.Write($"{o.GetType().FullName}.{o}", intentLevel);
-                return;
-            }
-
-            if (o is Guid guid)
-            {
-                this.Write($"new Guid(\"{guid:D}\")", intentLevel);
-                return;
-            }
-
-            var type = o.GetType();
-            var typeInfo = type.GetTypeInfo();
-            if (typeInfo.IsGenericType && typeInfo.GetGenericTypeDefinition() == typeof(KeyValuePair<,>))
-            {
-                var kvpKey = type.GetRuntimeProperty(nameof(KeyValuePair<object, object>.Key)).GetValue(o, null);
-                var kvpValue = type.GetRuntimeProperty(nameof(KeyValuePair<object, object>.Value)).GetValue(o, null);
-
-                this.Write("{ ", intentLevel);
-                this.FormatValue(kvpKey);
-                this.Write(", ");
-                this.FormatValue(kvpValue);
-                this.Write(" }");
-                return;
-            }
-
-            if (o is IEnumerable)
-            {
-                this.Write($"new {GetClassName(o)}", intentLevel);
-                this.LineBreak();
-                this.StartLine("{");
-                this.LineBreak();
-                this.WriteItems((IEnumerable)o);
-                this.StartLine("}");
-                return;
-            }
-
-            this.CreateObject(o, intentLevel);
+            Write("</div>");
         }
 
-        private void WriteItems(IEnumerable items)
+        protected override void WritePropertyBegin(PropertyInfo property)
         {
-            this.Level++;
-            if (this.IsMaxLevel())
-            {
-                ////this.StartLine("// Omitted code");
-                ////this.LineBreak();
-                this.Level--;
-                return;
-            }
-
-            var e = items.GetEnumerator();
-            if (e.MoveNext())
-            {
-                this.FormatValue(e.Current, this.Level);
-
-                while (e.MoveNext())
-                {
-                    this.Write(",");
-                    this.LineBreak();
-
-                    this.FormatValue(e.Current, this.Level);
-                }
-
-                this.LineBreak();
-            }
-
-            this.Level--;
+            Write($"<div class={CssClass("type-" + property?.PropertyType?.GetFormattedName() ?? "null", property.Name)}><span class={CssClass("label")}>{property.Name}</span> ");
         }
 
-        private static string GetClassName(object o)
+        protected override void WritePropertyEnd(PropertyInfo property, bool lastProperty)
+        {
+            Write($"</div>");
+        }
+
+        protected override void WriteBool(PropertyInfo property, bool value)
+        {
+            Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
+        }
+
+        protected override void WriteByte(PropertyInfo property, byte value)
+        {
+            Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
+        }
+
+        protected override void WriteChar(PropertyInfo property, char value)
+        {
+            Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
+        }
+
+        protected override void WriteDecimal(PropertyInfo property, decimal value)
+        {
+            Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
+        }
+
+        protected override void WriteDouble(PropertyInfo property, double value)
+        {
+            Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
+        }
+        protected override void WriteEnum(PropertyInfo property, Enum value)
+        {
+            Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
+        }
+
+        protected override void WriteFloat(PropertyInfo property, float value)
+        {
+            Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
+        }
+
+        protected override void WriteGuid(PropertyInfo property, Guid value)
+        {
+            Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
+        }
+
+        protected override void WriteInt(PropertyInfo property, int value)
+        {
+            Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
+        }
+
+        protected override void WriteLong(PropertyInfo property, long value)
+        {
+            Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
+        }
+
+        protected override void WriteNull(PropertyInfo property)
+        {
+            Write($"<span class={CssClass("value", "null")}>null</span>");
+        }
+
+        protected override void WriteSbyte(PropertyInfo property, sbyte value)
+        {
+            Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
+        }
+
+        protected override void WriteShort(PropertyInfo property, short value)
+        {
+            Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
+        }
+
+        protected override void WriteString(PropertyInfo property, string value)
+        {
+            Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
+        }
+
+        protected override void WriteUint(PropertyInfo property, uint value)
+        {
+            Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
+        }
+
+        protected override void WriteUlong(PropertyInfo property, ulong value)
+        {
+            Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
+        }
+
+        protected override void WriteUshort(PropertyInfo property, ushort value)
+        {
+            Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
+        }
+        protected override void WriteDateTime(PropertyInfo property, DateTime value)
+        {
+            Write($"<span class={CssClass("value")}>{value.ToString("o")}</span>");
+        }
+
+        private static Regex cssRegex = new Regex("[^A-z0-9_-]");
+        private static string CssClass(params string[] classes)
+        {
+            StringBuilder result = new StringBuilder();
+            result.Append("\"");
+            for (int i = 0; i < classes.Length; i++)
+            {
+                result.Append("obj-");
+                result.Append(cssRegex.Replace(classes[i].Replace('<', '-'), string.Empty));
+                if (i < classes.Length - 1)
+                {
+                    result.Append(" ");
+                }
+            }
+            result.Append("\"");
+
+            return result.ToString();
+        }
+
+        private static string GetTypeName(object o)
         {
             var type = o.GetType();
-            var className = type.GetFormattedName();
-            return className;
-        }
-
-        private static string GetVariableName(object element)
-        {
-            if (element == null)
-            {
-                return "x";
-            }
-
-            var type = element.GetType();
-            var variableName = type.Name;
-
-            if (element is IEnumerable)
-            {
-                variableName = GetClassName(element)
-                    .Replace("<", "")
-                    .Replace(">", "")
-                    .Replace(" ", "")
-                    .Replace(",", "");
-            }
-            else if (type.GetTypeInfo().IsGenericType)
-            {
-                variableName = $"{type.Name.Substring(0, type.Name.IndexOf('`'))}";
-            }
-
-            return variableName.ToLowerFirst();
+            var name = type.GetFormattedName();
+            return name;
         }
     }
 }
