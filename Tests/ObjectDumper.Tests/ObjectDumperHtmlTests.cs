@@ -22,41 +22,59 @@ namespace ObjectDumping.Tests
         }
 
         [Fact]
-        public void ShouldDumpObject()
+        public void OuterElementIsDiv()
         {
             // Arrange
             var person = PersonFactory.GetPersonThomas();
-            person.Char = 'M';
             // Act
-            var dump = ObjectDumperHtml.Dump(person);
-
+            var html = ObjectDumperHtml.Dump(person);
+            var htmlDoc = html.ToHtmlDocument();
             // Assert
-            this.testOutputHelper.WriteLine(dump.Escape());
-            dump.Should().NotBeNull();
-            dump.Should().Be("var person = new Person\r\n{\r\n  Name = \"Thomas\",\r\n  Char = '\\0',\r\n  Age = 30,\r\n  GetOnly = 11,\r\n  Bool = false,\r\n  Byte = 0,\r\n  ByteArray = new Byte[]\r\n  {\r\n    1,\r\n    2,\r\n    3,\r\n    4\r\n  },\r\n  SByte = 0,\r\n  Float = 0f,\r\n  Uint = 0,\r\n  Long = 0L,\r\n  ULong = 0L,\r\n  Short = 0,\r\n  UShort = 0,\r\n  Decimal = 0m,\r\n  Double = 0d,\r\n  DateTime = DateTime.MinValue,\r\n  NullableDateTime = null,\r\n  Enum = System.DateTimeKind.Unspecified\r\n};");
+            this.testOutputHelper.WriteLine(html.Escape());
+            htmlDoc.DocumentNode.FirstChild.Name.Should().Be("div");
         }
 
         [Fact]
-        public void ShouldDumpObject_WithDumpOptions()
+        public void OuterElementIsDivHasClasses()
         {
             // Arrange
             var person = PersonFactory.GetPersonThomas();
-            var options = new DumpOptions
-            {
-                IndentSize = 1,
-                IndentChar = '\t',
-                LineBreakChar = "\n",
-                SetPropertiesOnly = true
-            };
-
             // Act
-            var dump = ObjectDumperHtml.Dump(person, options);
-
+            var html = ObjectDumperHtml.Dump(person);
+            var htmlDoc = html.ToHtmlDocument();
+            var outerElement = htmlDoc.DocumentNode.FirstChild;
             // Assert
-            this.testOutputHelper.WriteLine(dump);
-            dump.Should().NotBeNull();
-            dump.Should().Be("var person = new Person\n{\n	Name = \"Thomas\",\n	Char = '\\0',\n	Age = 30,\n	Bool = false,\n	Byte = 0,\n	ByteArray = new Byte[]\n	{\n		1,\n		2,\n		3,\n		4\n	},\n	SByte = 0,\n	Float = 0f,\n	Uint = 0,\n	Long = 0L,\n	ULong = 0L,\n	Short = 0,\n	UShort = 0,\n	Decimal = 0m,\n	Double = 0d,\n	DateTime = DateTime.MinValue,\n	NullableDateTime = null,\n	Enum = System.DateTimeKind.Unspecified\n};");
+            this.testOutputHelper.WriteLine(html.Escape());
+            outerElement.HasClass("obj-dump").Should().BeTrue();
+            outerElement.HasClass("obj-type-Person").Should().BeTrue();
         }
+
+        [Fact]
+        public void OuterElementHasTypeInfo()
+        {
+            // Arrange
+            var person = PersonFactory.GetPersonThomas();
+            // Act
+            var html = ObjectDumperHtml.Dump(person);
+            var htmlDoc = html.ToHtmlDocument();
+            var outerElement = htmlDoc.DocumentNode.FirstChild;
+            var typeInfoElement = outerElement.FirstChild;
+            // Assert
+            this.testOutputHelper.WriteLine(typeInfoElement.OuterHtml);
+            typeInfoElement.Name.Should().Be("div");
+            typeInfoElement.HasClass("obj-type-info").Should().BeTrue();
+            typeInfoElement.InnerText.Should().Be("Dumped Type: Person");
+
+            var span1 = typeInfoElement.FirstChild;
+            var span2 = typeInfoElement.LastChild;
+            span1.Name.Should().Be("span");
+            span1.HasClass("obj-label").Should().BeTrue();            
+
+            span2.Name.Should().Be("span");
+            span2.HasClass("obj-type").Should().BeTrue();
+        }
+
+
 
         [Fact]
         public void ShouldDumpEnumerable()
