@@ -10,7 +10,7 @@ namespace ObjectDumping.Internal
     /// </summary>
     internal class ObjectDumperConsole : DumperBase
     {
-        public ObjectDumperConsole(DumpOptions dumpOptions) : base(dumpOptions)
+        public ObjectDumperConsole(DumpOptions dumpOptions) : base(dumpOptions, false)
         {
         }
 
@@ -22,213 +22,105 @@ namespace ObjectDumping.Internal
             }
 
             var instance = new ObjectDumperConsole(dumpOptions);
-            return instance.DumpElement(element);
+            instance.DumpData(element);
+            return instance.ToString();
         }
 
-        private string DumpElement(object element)
+        protected override void WriteEnumerableBegin(MemberInfo property, IEnumerable x)
         {
-            if (this.Level > this.DumpOptions.MaxLevel)
+            if (ObjectLevel > 1)
             {
-                return this.ToString();
+                Write("...");
+                Indent++;
+                LineBreak();
             }
-
-            if (element == null || element is ValueType || element is string)
+        }
+        protected override void WriteEnumerableSeperator(bool lastItem)
+        {
+            if (!lastItem)
             {
-                this.Write(this.FormatValue(element));
+                LineBreak();
+            }
+        }
+        protected override void WriteEnumerableEnd(MemberInfo property, IEnumerable x)
+        {
+            if (ObjectLevel > 1)
+            {
+                Indent--;
+            }
+            LineBreak();
+        }
+        protected override void WriteObjectStart(object value, Type type)
+        {
+            if (EnumerableIndex>1)
+            {
+                LineBreak(true);
+            }
+            if (!InEnumerable && ObjectLevel > 1)
+            {
+                Write("{ }");
+                LineBreak();
+                Indent++;
+            }
+            Write($"{{{type.GetFormattedName(useFullName: true)}}}");
+            LineBreak();
+            Indent++;
+        }
+        protected override void WriteObjectEnd(object value)
+        {
+            Indent--;
+            if (!InEnumerable && ObjectLevel > 1)
+            {
+                Indent--;
+            }
+        }
+        protected override void WriteCircularReference(object value)
+        {
+            Write("<-- bidirectional reference found");
+        }
+        protected override void WriteMaxLevel(object value) { }
+        protected override void WriteKeyValuePairBegin() { Write("["); }
+        protected override void WriteKeyValuePairEnd() { Write("]"); }
+        protected override void WriteKeyValuePairSeperator() { Write(", "); }
+        protected override void WritePropertyBegin(PropertyInfo property)
+        {
+            Write($"{property.Name}: ");
+        }
+        protected override void WritePropertyEnd(PropertyInfo property, bool lastProperty)
+        {
+            LineBreak();
+        }
+        protected override void WriteBeginProperties() { }
+        protected override void WriteEndProperties() { }
+        protected override void WriteFieldBegin(FieldInfo field)
+        {
+            Write($"{field.Name}: ");
+        }
+        protected override void WriteFieldEnd(FieldInfo field, bool lastProperty)
+        {
+            LineBreak();
+        }
+        protected override void WriteBeginFields() { }
+        protected override void WriteEndFields() { }
+
+        protected override void WriteString(MemberInfo property, string value)
+        {
+            Write($"\"{value}\"");
+        }
+        protected override void WriteChar(MemberInfo property, char value)
+        {
+            Write($"{value.ToString()}");
+        }
+        protected override void WriteBool(MemberInfo property, bool value)
+        {
+            if (value)
+            {
+                Write("True");
             }
             else
             {
-                var objectType = element.GetType();
-                if (!typeof(IEnumerable).GetTypeInfo().IsAssignableFrom(objectType.GetTypeInfo()))
-                {
-                    this.Write(GetClassName(element));
-                    this.LineBreak();
-                    this.AddAlreadyTouched(element);
-                    this.Level++;
-                }
-
-                var enumerableElement = element as IEnumerable;
-                if (enumerableElement != null)
-                {
-                    foreach (var item in enumerableElement)
-                    {
-                        if (item is IEnumerable && !(item is string))
-                        {
-                            this.Level++;
-                            this.DumpElement(item);
-                            this.Level--;
-                        }
-                        else
-                        {
-                            if (!this.AlreadyTouched(item))
-                            {
-                                this.DumpElement(item);
-                            }
-                            else
-                            {
-                                this.Write($"{GetClassName(element)} <-- bidirectional reference found");
-                                this.LineBreak();
-                            }
-                        }
-
-                        this.LineBreak();
-                    }
-                }
-                else
-                {
-                    var publicFields = element.GetType().GetRuntimeFields().Where(f => !f.IsPrivate);
-                    foreach (var fieldInfo in publicFields)
-                    {
-                        var value = fieldInfo.TryGetValue(element);
-
-                        if (fieldInfo.FieldType.GetTypeInfo().IsValueType || fieldInfo.FieldType == typeof(string))
-                        {
-                            this.Write($"{fieldInfo.Name}: {this.FormatValue(value)}");
-                            this.LineBreak();
-                        }
-                        else
-                        {
-                            var isEnumerable = typeof(IEnumerable).GetTypeInfo()
-                                .IsAssignableFrom(fieldInfo.FieldType.GetTypeInfo());
-                            this.Write($"{fieldInfo.Name}: {(isEnumerable ? "..." : (value != null ? "{ }" : "null"))}");
-                            this.LineBreak();
-
-                            if (value != null)
-                            {
-                                var alreadyTouched = !isEnumerable && this.AlreadyTouched(value);
-                                this.Level++;
-                                if (!alreadyTouched)
-                                {
-                                    this.DumpElement(value);
-                                }
-                                else
-                                {
-                                    this.Write($"{GetClassName(element)} <-- bidirectional reference found");
-                                    this.LineBreak();
-                                }
-
-                                this.Level--;
-                            }
-                        }
-                    }
-
-                    var properties = element.GetType().GetRuntimeProperties()
-                        .Where(p => p.GetMethod != null && p.GetMethod.IsPublic && p.GetMethod.IsStatic == false)
-                        .ToList();
-
-                    if (this.DumpOptions.ExcludeProperties != null && this.DumpOptions.ExcludeProperties.Any())
-                    {
-                        properties = properties
-                            .Where(p => !this.DumpOptions.ExcludeProperties.Contains(p.Name))
-                            .ToList();
-                    }
-
-                    if (this.DumpOptions.SetPropertiesOnly)
-                    {
-                        properties = properties
-                            .Where(p => p.SetMethod != null && p.SetMethod.IsPublic && p.SetMethod.IsStatic == false)
-                            .ToList();
-                    }
-
-                    if (this.DumpOptions.IgnoreDefaultValues)
-                    {
-                        properties = properties
-                            .Where(p =>
-                            {
-                                var value = p.GetValue(element);
-                                var defaultValue = p.PropertyType.GetDefault();
-                                var isDefaultValue = Equals(value, defaultValue);
-                                return !isDefaultValue;
-                            })
-                            .ToList();
-                    }
-
-                    if (this.DumpOptions.PropertyOrderBy != null)
-                    {
-                        properties = properties.OrderBy(this.DumpOptions.PropertyOrderBy.Compile())
-                            .ToList();
-                    }
-
-                    foreach (var propertyInfo in properties)
-                    {
-                        var type = propertyInfo.PropertyType;
-                        var value = propertyInfo.TryGetValue(element);
-
-                        if (type.GetTypeInfo().IsValueType || type == typeof(string))
-                        {
-                            this.Write($"{propertyInfo.Name}: {this.FormatValue(value)}");
-                            this.LineBreak();
-                        }
-                        else
-                        {
-                            var isEnumerable = typeof(IEnumerable).GetTypeInfo().IsAssignableFrom(type.GetTypeInfo());
-                            this.Write($"{propertyInfo.Name}: {(isEnumerable ? "..." : (value != null ? "{ }" : "null"))}");
-                            this.LineBreak();
-
-                            if (value != null)
-                            {
-                                var alreadyTouched = !isEnumerable && this.AlreadyTouched(value);
-                                this.Level++;
-                                if (!alreadyTouched)
-                                {
-                                    this.DumpElement(value);
-                                }
-                                else
-                                {
-                                    this.Write($"{GetClassName(element)} <-- bidirectional reference found");
-                                    this.LineBreak();
-                                }
-
-                                this.Level--;
-                            }
-                        }
-                    }
-                }
-
-                if (!typeof(IEnumerable).GetTypeInfo().IsAssignableFrom(objectType.GetTypeInfo()))
-                {
-                    this.Level--;
-                }
+                Write("False");
             }
-
-            return this.ToString();
-        }
-
-        private string FormatValue(object o)
-        {
-            if (o == null)
-            {
-                return "null";
-            }
-
-            if (o is string)
-            {
-                return $"\"{o}\"";
-            }
-
-            if (o is char && (char)o == '\0')
-            {
-                return string.Empty;
-            }
-
-            if (o is ValueType)
-            {
-                return o.ToString();
-            }
-
-            if (o is IEnumerable)
-            {
-                return "...";
-            }
-
-            return "{ }";
-        }
-
-        private static string GetClassName(object element)
-        {
-            var type = element.GetType();
-            var className = type.GetFormattedName(useFullName: true);
-            return $"{{{className}}}";
         }
     }
 }

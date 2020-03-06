@@ -29,11 +29,15 @@ namespace ObjectDumping.Internal
             return instance.ToString();
         }
 
-        protected override void WriteObjectStart(object value)
+        protected override void WriteObjectStart(object value, Type type)
         {
             Write($"new {GetClassName(value)}");
             LineBreak();
             Write("{");
+            LineBreak();
+        }
+        protected override void WriteMaxLevel(object value)
+        {
             LineBreak();
         }
 
@@ -51,34 +55,48 @@ namespace ObjectDumping.Internal
             LineBreak();
         }
 
-        protected override void WriteString(PropertyInfo property, string value)
+        protected override void WriteFieldBegin(FieldInfo field)
+        {
+            Write($"{field.Name} = ");
+        }
+
+        protected override void WriteFieldEnd(FieldInfo field, bool lastField)
+        {
+            Write(",");
+            LineBreak();
+        }
+
+        protected override void WriteBeginFields() { }
+        protected override void WriteEndFields() { }
+
+        protected override void WriteString(MemberInfo property, string value)
             => Write($"\"{value.Escape()}\"");
 
-        protected override void WriteChar(PropertyInfo property, char value)
+        protected override void WriteChar(MemberInfo property, char value)
             => Write($"'{value.ToString().Escape()}'");
 
-        protected override void WriteDouble(PropertyInfo property, double value)
+        protected override void WriteDouble(MemberInfo property, double value)
             => Write($"{value}d");
 
-        protected override void WriteDecimal(PropertyInfo property, decimal value)
+        protected override void WriteDecimal(MemberInfo property, decimal value)
             => Write($"{value}m");
 
-        protected override void WriteFloat(PropertyInfo property, float value)
+        protected override void WriteFloat(MemberInfo property, float value)
             => Write($"{value}f");
 
-        protected override void WriteLong(PropertyInfo property, long value)
+        protected override void WriteLong(MemberInfo property, long value)
             => Write($"{value}L");
 
-        protected override void WriteUlong(PropertyInfo property, ulong value)
+        protected override void WriteUlong(MemberInfo property, ulong value)
             => Write($"{value}L");
 
-        protected override void WriteEnum(PropertyInfo property, Enum value)
+        protected override void WriteEnum(MemberInfo property, Enum value)
             => Write($"{value.GetType().FullName}.{value}");
 
-        protected override void WriteGuid(PropertyInfo property, Guid value)
+        protected override void WriteGuid(MemberInfo property, Guid value)
             => Write($"new Guid(\"{value:D}\")");
 
-        protected override void WriteDateTime(PropertyInfo property, DateTime value)
+        protected override void WriteDateTime(MemberInfo property, DateTime value)
         {
             if (value == DateTime.MinValue)
             {
@@ -94,7 +112,7 @@ namespace ObjectDumping.Internal
             }
         }
 
-        protected override void WriteEnumerableBegin(PropertyInfo property, IEnumerable x)
+        protected override void WriteEnumerableBegin(MemberInfo property, IEnumerable x)
         {
             Write($"new {GetClassName(x)}");
             LineBreak();
@@ -111,7 +129,7 @@ namespace ObjectDumping.Internal
             LineBreak();
         }
 
-        protected override void WriteEnumerableEnd(PropertyInfo property, IEnumerable x)
+        protected override void WriteEnumerableEnd(MemberInfo property, IEnumerable x)
         {
             Write("}");
         }

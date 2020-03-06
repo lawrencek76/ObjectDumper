@@ -6,9 +6,9 @@ namespace ObjectDumping.Tests.Testdata
     {
         public Person()
         {
-            this.GetOnly = 11;
-            this.SetOnly = 99;
-            this.ByteArray = new byte[] { 1, 2, 3, 4 };
+            GetOnly = 11;
+            SetOnly = 99;
+            ByteArray = new byte[] { 1, 2, 3, 4 };
         }
 
         public string Name { get; set; }

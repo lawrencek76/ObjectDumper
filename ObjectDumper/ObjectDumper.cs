@@ -44,6 +44,11 @@ public static class ObjectDumper
             return ObjectDumperConsole.Dump(element, dumpOptions);
         }
 
+        if (dumpOptions.DumpStyle == DumpStyle.Html)
+        {
+            return ObjectDumperHtml.Dump(element, dumpOptions);
+        }
+
         return ObjectDumperCSharp.Dump(element, dumpOptions);
     }
 }

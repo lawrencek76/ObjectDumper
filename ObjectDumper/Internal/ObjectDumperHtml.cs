@@ -37,7 +37,7 @@ namespace ObjectDumping.Internal
             return instance.ToString();
         }
 
-        protected override void WriteObjectStart(object value)
+        protected override void WriteObjectStart(object value, Type type)
         {
             Write($"<div class={"type-" + GetTypeName(value)}>");
         }
@@ -57,90 +57,90 @@ namespace ObjectDumping.Internal
             Write($"</div>");
         }
 
-        protected override void WriteBool(PropertyInfo property, bool value)
+        protected override void WriteBool(MemberInfo property, bool value)
         {
             Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
         }
 
-        protected override void WriteByte(PropertyInfo property, byte value)
+        protected override void WriteByte(MemberInfo property, byte value)
         {
             Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
         }
 
-        protected override void WriteChar(PropertyInfo property, char value)
+        protected override void WriteChar(MemberInfo property, char value)
         {
             Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
         }
 
-        protected override void WriteDecimal(PropertyInfo property, decimal value)
+        protected override void WriteDecimal(MemberInfo property, decimal value)
         {
             Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
         }
 
-        protected override void WriteDouble(PropertyInfo property, double value)
+        protected override void WriteDouble(MemberInfo property, double value)
         {
             Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
         }
-        protected override void WriteEnum(PropertyInfo property, Enum value)
-        {
-            Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
-        }
-
-        protected override void WriteFloat(PropertyInfo property, float value)
+        protected override void WriteEnum(MemberInfo property, Enum value)
         {
             Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
         }
 
-        protected override void WriteGuid(PropertyInfo property, Guid value)
+        protected override void WriteFloat(MemberInfo property, float value)
         {
             Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
         }
 
-        protected override void WriteInt(PropertyInfo property, int value)
+        protected override void WriteGuid(MemberInfo property, Guid value)
         {
             Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
         }
 
-        protected override void WriteLong(PropertyInfo property, long value)
+        protected override void WriteInt(MemberInfo property, int value)
         {
             Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
         }
 
-        protected override void WriteNull(PropertyInfo property)
+        protected override void WriteLong(MemberInfo property, long value)
+        {
+            Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
+        }
+
+        protected override void WriteNull(MemberInfo property)
         {
             Write($"<span class={CssClass("value", "null")}>null</span>");
         }
 
-        protected override void WriteSbyte(PropertyInfo property, sbyte value)
+        protected override void WriteSbyte(MemberInfo property, sbyte value)
         {
             Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
         }
 
-        protected override void WriteShort(PropertyInfo property, short value)
+        protected override void WriteShort(MemberInfo property, short value)
         {
             Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
         }
 
-        protected override void WriteString(PropertyInfo property, string value)
+        protected override void WriteString(MemberInfo property, string value)
         {
             Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
         }
 
-        protected override void WriteUint(PropertyInfo property, uint value)
+        protected override void WriteUint(MemberInfo property, uint value)
         {
             Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
         }
 
-        protected override void WriteUlong(PropertyInfo property, ulong value)
+        protected override void WriteUlong(MemberInfo property, ulong value)
         {
             Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
         }
 
-        protected override void WriteUshort(PropertyInfo property, ushort value)
+        protected override void WriteUshort(MemberInfo property, ushort value)
         {
             Write($"<span class={CssClass("value")}>{value.ToString()}</span>");
         }
-        protected override void WriteDateTime(PropertyInfo property, DateTime value)
+        protected override void WriteDateTime(MemberInfo property, DateTime value)
         {
             Write($"<span class={CssClass("value")}>{value.ToString("o")}</span>");
         }

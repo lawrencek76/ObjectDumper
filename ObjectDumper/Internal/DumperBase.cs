@@ -9,185 +9,41 @@ namespace ObjectDumping.Internal
 {
     public abstract class DumperBase
     {
-        private readonly List<int> hashListOfFoundElements;
+        private readonly Stack<int> listOfWrittenMembers;
         private readonly StringBuilder stringBuilder;
         private bool isNewLine;
+        private bool AutoIndent;
+        private int indentLevel;
 
-        protected DumperBase(DumpOptions dumpOptions)
+        protected DumperBase(DumpOptions dumpOptions, bool autoIndent = true)
         {
-            this.DumpOptions = dumpOptions;
-            this.Level = 0;
-            this.stringBuilder = new StringBuilder();
-            this.hashListOfFoundElements = new List<int>();
-            this.isNewLine = true;
-        }
-
-        public int Level { get; set; }
-
-        public bool IsMaxLevel()
-        {
-            return this.Level > this.DumpOptions.MaxLevel;
-        }
-
-        protected DumpOptions DumpOptions { get; }
-
-        /// <summary>
-        /// Calls <see cref="Write(string, int)"/> using the current Level as indentLevel if the current
-        /// position is at a the beginning of a new line or 0 otherwise. 
-        /// </summary>
-        /// <param name="value">string to be written</param>
-        protected void Write(string value)
-        {
-            if (this.isNewLine)
-            {
-                Write(value, Level);
-            }
-            else
-            {
-                Write(value, 0);
-            }
-        }
-
-        /// <summary>
-        /// Writes value to underlying <see cref="StringBuilder"/> using <paramref name="indentLevel"/> and <see cref="DumpOptions.IndentChar"/> and <see cref="DumpOptions.IndentSize"/>
-        /// to determin the indention chars prepended to <paramref name="value"/>
-        /// </summary>
-        /// <remarks>
-        /// This function needs to keep up with if the last value written included the LineBreakChar at the end
-        /// </remarks>
-        /// <param name="value">string to be written</param>
-        /// <param name="indentLevel">number of indentions to prepend default 0</param>
-        protected void Write(string value, int indentLevel = 0)
-        {
-            this.stringBuilder.Append(this.DumpOptions.IndentChar, indentLevel * this.DumpOptions.IndentSize);
-            this.stringBuilder.Append(value);
-            if (value.EndsWith(this.DumpOptions.LineBreakChar))
-            {
-                this.isNewLine = true;
-            }
-            else
-            {
-                this.isNewLine = false;
-            }
-        }
-
-        /// <summary>
-        /// Writes a line break to underlying <see cref="StringBuilder"/> using <see cref="DumpOptions.LineBreakChar"/>
-        /// </summary>
-        /// <remarks>
-        /// By definition this sets isNewLine to true
-        /// </remarks>
-        protected void LineBreak()
-        {
-            this.stringBuilder.Append(this.DumpOptions.LineBreakChar);
+            DumpOptions = dumpOptions;
+            ObjectLevel = 0;
+            indentLevel = 0;
+            stringBuilder = new StringBuilder();
+            listOfWrittenMembers = new Stack<int>();
             isNewLine = true;
+            AutoIndent = autoIndent;
         }
 
-        protected void AddAlreadyTouched(object element)
+        protected int ObjectLevel { get; private set; }
+        protected bool InEnumerable { get => EnumerableLevel > 0; }
+        protected int EnumerableLevel { get; private set; }
+        protected int EnumerableIndex { get; private set; }
+        protected DumpOptions DumpOptions { get; }
+        protected bool IsMaxLevel { get => ObjectLevel > DumpOptions.MaxLevel; }
+        protected int Indent
         {
-            this.hashListOfFoundElements.Add(element.GetHashCode());
+            get => indentLevel;
+            set => indentLevel = value < 0 ? 0 : value;
         }
-
-        protected bool AlreadyTouched(object value)
-        {
-            if (value == null)
-            {
-                return false;
-            }
-
-            var hash = value.GetHashCode();
-            for (var i = 0; i < this.hashListOfFoundElements.Count; i++)
-            {
-                if (this.hashListOfFoundElements[i] == hash)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
         protected void DumpData(object value)
         {
-            DumpElement(null, value);
+            Dump(null, value);
         }
 
-        private void DumpObject(object value)
+        private void Dump(MemberInfo property, object value)
         {
-            var type = value.GetType();
-            var typeInfo = type.GetTypeInfo();
-            if (typeInfo.IsGenericType && typeInfo.GetGenericTypeDefinition() == typeof(KeyValuePair<,>))
-            {
-                DumpKeyValuePair(value, type);
-                return;
-            }
-
-            var properties = value.GetType().GetRuntimeProperties()
-               .Where(p => p.GetMethod != null && p.GetMethod.IsPublic && p.GetMethod.IsStatic == false);
-
-            if (this.DumpOptions.ExcludeProperties != null && this.DumpOptions.ExcludeProperties.Any())
-            {
-                properties = properties
-                    .Where(p => !this.DumpOptions.ExcludeProperties.Contains(p.Name));
-
-            }
-            if (this.DumpOptions.SetPropertiesOnly)
-            {
-                properties = properties
-                    .Where(p => p.SetMethod != null && p.SetMethod.IsPublic && p.SetMethod.IsStatic == false);
-
-            }
-            if (this.DumpOptions.IgnoreDefaultValues)
-            {
-                properties = properties
-                    .Where(p =>
-                    {
-                        var currentValue = p.GetValue(value);
-                        var defaultValue = p.PropertyType.GetDefault();
-                        var isDefaultValue = Equals(currentValue, defaultValue);
-                        return !isDefaultValue;
-                    });
-
-            }
-            if (this.DumpOptions.PropertyOrderBy != null)
-            {
-                properties = properties.OrderBy(this.DumpOptions.PropertyOrderBy.Compile());
-            }
-            WriteObjectStart(value);
-            this.Level++;
-            WriteBeginProperties();
-            var propertyList = properties.ToList();
-            for (int i = 0; i < propertyList.Count; i++)
-            {
-                var property = propertyList[i];
-                WritePropertyBegin(property);
-                DumpElement(property, property.TryGetValue(value));
-                WritePropertyEnd(property, i == (propertyList.Count - 1));
-            }
-            WriteEndProperties();
-            this.Level--;
-            WriteObjectEnd(value);
-        }
-
-        private void DumpKeyValuePair(object value, Type type)
-        {
-            var kvpKey = type.GetRuntimeProperty(nameof(KeyValuePair<object, object>.Key));
-            var kvpValue = type.GetRuntimeProperty(nameof(KeyValuePair<object, object>.Value));
-
-            WriteKeyValuePairBegin();
-            DumpElement(kvpKey, kvpKey.TryGetValue(value));
-            WriteKeyValuePairSeperator();
-            DumpElement(kvpValue, kvpValue.TryGetValue(value));
-            WriteKeyValuePairEnd();
-        }
-
-        private void DumpElement(PropertyInfo property, object value)
-        {
-            if (this.IsMaxLevel())
-            {
-                return;
-            }
-
             switch (value)
             {
                 case null:
@@ -244,73 +100,313 @@ namespace ObjectDumping.Internal
                 case Guid x:
                     WriteGuid(property, x);
                     break;
-                case IEnumerable x:
-                    WriteEnumerableBegin(property, x);
-                    DumpEnumerable(x);
-                    WriteEnumerableEnd(property, x);
-                    break;
                 default:
-                    DumpObject(value);
+                    WriteObject(property, value);
                     break;
             }
         }
 
-        private void DumpEnumerable(IEnumerable items)
+        private void WriteObject(MemberInfo property, object value)
         {
-            this.Level++;
-            if (this.IsMaxLevel())
+            if (IsMaxLevel)
             {
-                this.Level--;
+                WriteMaxLevel(value);
                 return;
             }
-            
-            var e = items.GetEnumerator();
-            if (e.MoveNext())
+
+            if (AlreadyWritten(value))
             {
-                var item = e.Current;
-                while (e.MoveNext())
-                {
-                    DumpElement(null, item);
-                    item = e.Current;
-                    WriteEnumerableSeperator(false);
-                }
-                DumpElement(null, item);
-                WriteEnumerableSeperator(true);
+                WriteCircularReference(value);
+                return;
             }
-            
-            this.Level--;
+
+            var type = value.GetType();
+            var typeInfo = type.GetTypeInfo();
+            ObjectLevel++;
+            if (value is IEnumerable x)
+            {
+                DumpEnumerable(property, x);
+            }
+            else if (typeInfo.IsGenericType && typeInfo.GetGenericTypeDefinition() == typeof(KeyValuePair<,>))
+            {
+                DumpKeyValuePair(value, type);
+            }
+            else
+            {
+                DumpObject(value, type);
+            }
+            ObjectLevel--;
+            listOfWrittenMembers.Pop();
         }
 
-        protected virtual void WriteObjectStart(object value) => Write("{");
+        /// <summary>
+        /// Calls <see cref="Write(string, int)"/> using the current Level as indentLevel if the current
+        /// position is at a the beginning of a new line or 0 otherwise. 
+        /// </summary>
+        /// <param name="value">string to be written</param>
+        protected void Write(string value)
+        {
+            if (isNewLine)
+            {
+                Write(value, Indent);
+            }
+            else
+            {
+                Write(value, 0);
+            }
+        }
+
+        /// <summary>
+        /// Writes value to underlying <see cref="StringBuilder"/> using <paramref name="indentLevel"/> and <see cref="DumpOptions.IndentChar"/> and <see cref="DumpOptions.IndentSize"/>
+        /// to determin the indention chars prepended to <paramref name="value"/>
+        /// </summary>
+        /// <remarks>
+        /// This function needs to keep up with if the last value written included the LineBreakChar at the end
+        /// </remarks>
+        /// <param name="value">string to be written</param>
+        /// <param name="indentLevel">number of indentions to prepend default 0</param>
+        protected void Write(string value, int indentLevel = 0)
+        {
+            stringBuilder.Append(DumpOptions.IndentChar, indentLevel * DumpOptions.IndentSize);
+            stringBuilder.Append(value);
+            if (value.EndsWith(DumpOptions.LineBreakChar))
+            {
+                isNewLine = true;
+            }
+            else
+            {
+                isNewLine = false;
+            }
+        }
+
+        /// <summary>
+        /// Writes a line break to underlying <see cref="StringBuilder"/> using <see cref="DumpOptions.LineBreakChar"/>
+        /// </summary>
+        /// <remarks>
+        /// By definition this sets isNewLine to true
+        /// </remarks>
+        protected void LineBreak(bool force = false)
+        {
+            if (!isNewLine)
+            {
+                stringBuilder.Append(DumpOptions.LineBreakChar);
+                isNewLine = true;
+            }
+            else if (force && stringBuilder.Length > (2 * DumpOptions.LineBreakChar.Length))
+            {
+                if (!(DumpOptions.LineBreakChar + DumpOptions.LineBreakChar == stringBuilder.ToString(stringBuilder.Length - (DumpOptions.LineBreakChar.Length * 2), DumpOptions.LineBreakChar.Length * 2)))
+                {
+                    stringBuilder.Append(DumpOptions.LineBreakChar);
+                }
+            }
+        }
+
+        private bool AlreadyWritten(object value)
+        {
+            if (value == null)
+            {
+                return false;
+            }
+
+            var hash = value.GetHashCode();
+            if (listOfWrittenMembers.Contains(hash))
+            {
+                return true;
+            }
+            else
+            {
+                listOfWrittenMembers.Push(hash);
+                return false;
+            }
+        }
+
+        private void DumpObject(object value, Type type)
+        {
+            WriteObjectStart(value, type);
+            if (AutoIndent)
+            {
+                Indent++;
+            }
+            if (IsMaxLevel)
+            {
+                WriteMaxLevel(value);
+            }
+            else
+            {
+                var publicFields = value.GetType().GetRuntimeFields().Where(f => !f.IsPrivate);
+                var properties = value.GetType().GetRuntimeProperties()
+                   .Where(p => p.GetMethod != null && p.GetMethod.IsPublic && p.GetMethod.IsStatic == false);
+
+                if (DumpOptions.ExcludeProperties != null && DumpOptions.ExcludeProperties.Any())
+                {
+                    properties = properties
+                        .Where(p => !DumpOptions.ExcludeProperties.Contains(p.Name));
+
+                }
+                if (DumpOptions.SetPropertiesOnly)
+                {
+                    properties = properties
+                        .Where(p => p.SetMethod != null && p.SetMethod.IsPublic && p.SetMethod.IsStatic == false);
+
+                }
+                if (DumpOptions.IgnoreDefaultValues)
+                {
+                    publicFields = publicFields
+                        .Where(p =>
+                        {
+                            var currentValue = p.GetValue(value);
+                            var defaultValue = p.FieldType.GetDefault();
+                            var isDefaultValue = Equals(currentValue, defaultValue);
+                            return !isDefaultValue;
+                        });
+                    properties = properties
+                        .Where(p =>
+                        {
+                            var currentValue = p.GetValue(value);
+                            var defaultValue = p.PropertyType.GetDefault();
+                            var isDefaultValue = Equals(currentValue, defaultValue);
+                            return !isDefaultValue;
+                        });
+
+                }
+                if (DumpOptions.PropertyOrderBy != null)
+                {
+                    properties = properties.OrderBy(DumpOptions.PropertyOrderBy.Compile());
+                }
+                var propertyList = properties.ToList();
+                var fieldList = publicFields.ToList();
+                if (fieldList.Count > 0)
+                {
+                    WriteBeginFields();
+                    for (int i = 0; i < fieldList.Count; i++)
+                    {
+                        var field = fieldList[i];
+                        WriteFieldBegin(field);
+                        Dump(field, field.TryGetValue(value));
+                        WriteFieldEnd(field, i == (fieldList.Count - 1));
+                    }
+                    WriteEndFields();
+                }
+                if (propertyList.Count > 0)
+                {
+                    WriteBeginProperties();
+                    for (int i = 0; i < propertyList.Count; i++)
+                    {
+                        var property = propertyList[i];
+                        WritePropertyBegin(property);
+                        Dump(property, property.TryGetValue(value));
+                        WritePropertyEnd(property, i == (propertyList.Count - 1));
+                    }
+                    WriteEndProperties();
+                }
+            }
+            if (AutoIndent)
+            {
+                Indent--;
+            }
+
+            WriteObjectEnd(value);
+        }
+
+        private void DumpKeyValuePair(object value, Type type)
+        {
+            var kvpKey = type.GetRuntimeProperty(nameof(KeyValuePair<object, object>.Key));
+            var kvpValue = type.GetRuntimeProperty(nameof(KeyValuePair<object, object>.Value));
+
+            WriteKeyValuePairBegin();
+            if (IsMaxLevel)
+            {
+                WriteMaxLevel(value);
+            }
+            else
+            {
+                Dump(kvpKey, kvpKey.TryGetValue(value));
+                WriteKeyValuePairSeperator();
+                Dump(kvpValue, kvpValue.TryGetValue(value));
+            }
+            WriteKeyValuePairEnd();
+        }
+
+        private void DumpEnumerable(MemberInfo memberInfo, IEnumerable items)
+        {
+            EnumerableLevel++;
+            EnumerableIndex = 0;
+            WriteEnumerableBegin(memberInfo, items);
+            if (AutoIndent)
+            {
+                Indent++;
+            }
+            if (IsMaxLevel)
+            {
+                WriteMaxLevel(items);
+            }
+            else
+            {
+                var e = items.GetEnumerator();
+                if (e.MoveNext())
+                {
+                    int index = 0;
+                    var item = e.Current;
+                    while (e.MoveNext())
+                    {
+                        index++;
+                        EnumerableIndex = index;
+                        Dump(null, item);
+                        item = e.Current;
+                        WriteEnumerableSeperator(false);
+                    }
+                    index++;
+                    EnumerableIndex = index;
+                    Dump(null, item);
+                    WriteEnumerableSeperator(true);
+                }
+            }
+            if (AutoIndent)
+            {
+                Indent--;
+            }
+
+            WriteEnumerableEnd(memberInfo, items);
+            EnumerableLevel--;
+            EnumerableIndex = 0;
+        }
+
+        protected virtual void WriteObjectStart(object value, Type type) => Write("{");
         protected virtual void WriteObjectEnd(object value) => Write("}");
-        protected virtual void WriteEnumerableBegin(PropertyInfo property, IEnumerable x) => Write("[");
+        protected virtual void WriteCircularReference(object value) => Write("null /*Recursive Object Found*/");
+        protected virtual void WriteMaxLevel(object value) => Write("/*At Max Level*/");
+        protected virtual void WriteEnumerableBegin(MemberInfo property, IEnumerable x) => Write("[");
         protected virtual void WriteEnumerableSeperator(bool lastItem) => Write(",");
-        protected virtual void WriteEnumerableEnd(PropertyInfo property, IEnumerable x) => Write("]");
+        protected virtual void WriteEnumerableEnd(MemberInfo property, IEnumerable x) => Write("]");
         protected virtual void WriteKeyValuePairBegin() => Write("{");
         protected virtual void WriteKeyValuePairSeperator() => Write(",");
         protected virtual void WriteKeyValuePairEnd() => Write("}");
         protected virtual void WriteBeginProperties() => Write("{");
         protected virtual void WriteEndProperties() => Write("}");
-        protected virtual void WritePropertyBegin(PropertyInfo property) => Write("{");
-        protected virtual void WritePropertyEnd(PropertyInfo property, bool lastProperty) => Write("}");
-        protected virtual void WriteNull(PropertyInfo property) => Write("null");
-        protected virtual void WriteBool(PropertyInfo property, bool value) => Write(value ? "true" : "false");
-        protected virtual void WriteString(PropertyInfo property, string value) => Write(value);
-        protected virtual void WriteChar(PropertyInfo property, char value) => Write(value.ToString());
-        protected virtual void WriteDouble(PropertyInfo property, double value) => Write(value.ToString());
-        protected virtual void WriteDecimal(PropertyInfo property, decimal value) => Write(value.ToString());
-        protected virtual void WriteByte(PropertyInfo property, byte value) => Write(value.ToString());
-        protected virtual void WriteSbyte(PropertyInfo property, sbyte value) => Write(value.ToString());
-        protected virtual void WriteInt(PropertyInfo property, int value) => Write(value.ToString());
-        protected virtual void WriteFloat(PropertyInfo property, float value) => Write(value.ToString());
-        protected virtual void WriteUint(PropertyInfo property, uint value) => Write(value.ToString());
-        protected virtual void WriteLong(PropertyInfo property, long value) => Write(value.ToString());
-        protected virtual void WriteUlong(PropertyInfo property, ulong value) => Write(value.ToString());
-        protected virtual void WriteShort(PropertyInfo property, short value) => Write(value.ToString());
-        protected virtual void WriteUshort(PropertyInfo property, ushort value) => Write(value.ToString());
-        protected virtual void WriteDateTime(PropertyInfo property, DateTime value) => Write(value.ToString());
-        protected virtual void WriteEnum(PropertyInfo property, Enum value) => Write(value.ToString());
-        protected virtual void WriteGuid(PropertyInfo property, Guid value) => Write(value.ToString());
+        protected virtual void WritePropertyBegin(PropertyInfo property) => Write(property.Name);
+        protected virtual void WritePropertyEnd(PropertyInfo property, bool lastProperty) => Write(",");
+        protected virtual void WriteBeginFields() => Write("{");
+        protected virtual void WriteEndFields() => Write("}");
+        protected virtual void WriteFieldBegin(FieldInfo field) => Write(field.Name);
+        protected virtual void WriteFieldEnd(FieldInfo field, bool lastField) => Write(",");
+        protected virtual void WriteNull(MemberInfo property) => Write("null");
+        protected virtual void WriteBool(MemberInfo property, bool value) => Write(value ? "true" : "false");
+        protected virtual void WriteString(MemberInfo property, string value) => Write(value);
+        protected virtual void WriteChar(MemberInfo property, char value) => Write(value.ToString());
+        protected virtual void WriteDouble(MemberInfo property, double value) => Write(value.ToString());
+        protected virtual void WriteDecimal(MemberInfo property, decimal value) => Write(value.ToString());
+        protected virtual void WriteByte(MemberInfo property, byte value) => Write(value.ToString());
+        protected virtual void WriteSbyte(MemberInfo property, sbyte value) => Write(value.ToString());
+        protected virtual void WriteInt(MemberInfo property, int value) => Write(value.ToString());
+        protected virtual void WriteFloat(MemberInfo property, float value) => Write(value.ToString());
+        protected virtual void WriteUint(MemberInfo property, uint value) => Write(value.ToString());
+        protected virtual void WriteLong(MemberInfo property, long value) => Write(value.ToString());
+        protected virtual void WriteUlong(MemberInfo property, ulong value) => Write(value.ToString());
+        protected virtual void WriteShort(MemberInfo property, short value) => Write(value.ToString());
+        protected virtual void WriteUshort(MemberInfo property, ushort value) => Write(value.ToString());
+        protected virtual void WriteDateTime(MemberInfo property, DateTime value) => Write(value.ToString());
+        protected virtual void WriteEnum(MemberInfo property, Enum value) => Write(value.ToString());
+        protected virtual void WriteGuid(MemberInfo property, Guid value) => Write(value.ToString());
 
         /// <summary>
         /// Converts the value of this instance to a <see cref="string"/>
@@ -318,7 +414,7 @@ namespace ObjectDumping.Internal
         /// <returns>string</returns>
         public override string ToString()
         {
-            return this.stringBuilder.ToString();
+            return stringBuilder.ToString();
         }
     }
 }

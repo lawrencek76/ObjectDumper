@@ -8,15 +8,15 @@ public class DumpOptions
 {
     public DumpOptions()
     {
-        this.DumpStyle = DumpStyle.Console;
-        this.IndentSize = 2;
-        this.IndentChar = ' ';
-        this.LineBreakChar = Environment.NewLine;
-        this.SetPropertiesOnly = false;
-        this.MaxLevel = int.MaxValue;
-        this.ExcludeProperties = new HashSet<string>();
-        this.PropertyOrderBy = null;
-        this.IgnoreDefaultValues = false;
+        DumpStyle = DumpStyle.Console;
+        IndentSize = 2;
+        IndentChar = ' ';
+        LineBreakChar = Environment.NewLine;
+        SetPropertiesOnly = false;
+        MaxLevel = int.MaxValue;
+        ExcludeProperties = new HashSet<string>();
+        PropertyOrderBy = null;
+        IgnoreDefaultValues = false;
     }
 
     public DumpStyle DumpStyle { get; set; }

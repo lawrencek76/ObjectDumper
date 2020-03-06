@@ -57,15 +57,15 @@ namespace ObjectDumping.Tests.Utils
             try
             {
 #if NET452
-                Thread.CurrentThread.CurrentCulture = this.currentCulture;
-                Thread.CurrentThread.CurrentUICulture = this.currentCulture;
+                Thread.CurrentThread.CurrentCulture = currentCulture;
+                Thread.CurrentThread.CurrentUICulture = currentCulture;
 #else
-                CultureInfo.CurrentCulture = this.currentCulture;
-                CultureInfo.CurrentUICulture = this.currentCulture;
+                CultureInfo.CurrentCulture = currentCulture;
+                CultureInfo.CurrentUICulture = currentCulture;
 #endif
 
-                CultureInfo.DefaultThreadCurrentCulture = this.currentCulture;
-                CultureInfo.DefaultThreadCurrentUICulture = this.currentUiCulture;
+                CultureInfo.DefaultThreadCurrentCulture = currentCulture;
+                CultureInfo.DefaultThreadCurrentUICulture = currentUiCulture;
             }
             catch
             {

@@ -12,18 +12,18 @@ namespace ObjectDumping.Tests.Utils
         public CultureSpecificFixture()
         {
             var testCulture = new CultureInfo("de-CH");
-            this.changeCultureHelper = CurrentCultureHelper.ChangeCulture(testCulture);
+            changeCultureHelper = CurrentCultureHelper.ChangeCulture(testCulture);
         }
 
         ~CultureSpecificFixture()
         {
-            this.Dispose();
+            Dispose();
         }
 
         public void Dispose()
         {
             GC.SuppressFinalize(this);
-            this.changeCultureHelper.Dispose();
+            changeCultureHelper.Dispose();
         }
     }
 }

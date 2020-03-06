@@ -1,0 +1,9 @@
+﻿@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Home page";
+}
+
+@Html.Raw(ObjectDumper.Dump("Test", DumpStyle.Html))
+
+@Html.Raw(ObjectDumper.Dump(Request.Headers, DumpStyle.Html));
